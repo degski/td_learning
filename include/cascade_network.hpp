@@ -57,7 +57,7 @@ using const_span_ps = std::span<float const>;
 inline constexpr float euler_constant_ps = 2.718'281'746f;
 
 // a back-of-the-envelope-calc
-template<int NumInput, int NumOutput, int NumNeurons>
+template<int NumInput, int NumOnes, int NumOutput, int NumNeurons>
 class scratch_space;
 
 template<int NumInput, int NumOnes, int NumOutput, int NumNeurons>
