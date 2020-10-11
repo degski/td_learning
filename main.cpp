@@ -103,7 +103,16 @@ inline std::uint32_t pointer_alignment ( const void * p_ ) noexcept {
 #include "include/cascade_network.hpp"
 #include "include/td_learning.hpp"
 // __m128i _mm_minpos_epu16( __m128i packed_words);
-int main ( ) { return EXIT_SUCCESS; }
+int main ( ) { 
+    
+    cascade_network<2, 1, 3, 5> fccn ( rng ); 
+
+    std::cout << fccn.NumWeights << nl;
+
+    fccn.feed_forward ( );
+    
+    return EXIT_SUCCESS; 
+}
 
 #if 0
 

@@ -70,11 +70,11 @@ inline constexpr int roundup_multiple ( int i_, int m_ ) noexcept { return ( ( i
 namespace detail {
 
 template<int NumInput, int NumOnes, int NumOutput, int NumNeurons, int Padding>
-class alignas ( 32 ) aligned_storage { // every array can be cache aligned - blas-strides != 1
+struct alignas ( 32 ) aligned_storage { // every array can be cache aligned - blas-strides != 1
 
     template<int, int, int>
     friend class scratch_space;
-    template<int, int, int>
+    template<int, int, int, int>
     friend class cascade_network;
 
     std::array<float, Padding> _ = { };
@@ -85,11 +85,11 @@ class alignas ( 32 ) aligned_storage { // every array can be cache aligned - bla
 };
 
 template<int NumInput, int NumOnes, int NumOutput, int NumNeurons>
-class alignas ( 32 ) aligned_storage<NumInput, NumOnes, NumOutput, NumNeurons, 0> {
+struct alignas ( 32 ) aligned_storage<NumInput, NumOnes, NumOutput, NumNeurons, 0> {
 
     template<int, int, int>
     friend class scratch_space;
-    template<int, int, int>
+    template<int, int, int, int>
     friend class cascade_network;
 
     std::array<float, NumInput> raw;
@@ -103,9 +103,9 @@ class alignas ( 32 ) aligned_storage<NumInput, NumOnes, NumOutput, NumNeurons, 0
 template<int NumInput, int NumOnes, int NumOutput, int NumNeurons>
 class space {
 
-    template<int, int, int>
+    template<int, int, int, int>
     friend class scratch_space;
-    template<int, int, int>
+    template<int, int, int, int>
     friend class cascade_network;
 
     void zero ( ) noexcept {
@@ -143,7 +143,7 @@ reverse_container_wrapper<T> reverse_container_adaptor ( T && reverse_iterable_ 
 template<int NumInput, int NumOnes, int NumOutput, int NumNeurons>
 class scratch_space {
 
-    template<int, int, int>
+    template<int, int, int, int>
     friend class cascade_network;
 
     using space = space<NumInput, NumOnes, NumOutput, NumNeurons>;
@@ -156,7 +156,7 @@ class scratch_space {
     static constexpr int NumInpHid    = NumInput + NumOnes + NumNeurons - NumOutput;
     static constexpr int NumInpHidOut = NumInput + NumOnes + NumNeurons;
 
-    static constexpr int NumWeights = ( NumNeurons * ( 2 * NumInpHidOut ) ) / 2;
+    static constexpr int NumWeights = ( NumNeurons * NumInp) + ( NumNeurons - 1 ) * ( NumNeurons) / 2;
 
     public:
     scratch_space ( ) noexcept = default;
@@ -170,12 +170,9 @@ class scratch_space {
     [[nodiscard]] constexpr float & operator[] ( int i ) noexcept { return scratch[ i ]; }
     [[nodiscard]] constexpr float const & operator[] ( int i ) const noexcept { return scratch[ i ]; }
 
-    [[nodiscard]] constexpr float * data ( ) noexcept { return scratch.storage.raw ( ); }
-    [[nodiscard]] constexpr float const * data ( ) const noexcept { return scratch.storage.raw ( ); }
-
     // includes bias
-    [[nodiscard]] span_ps inp ( ) noexcept { return { scratch.storage.raw ( ), NumInput + 1 }; }
-    [[nodiscard]] const_span_ps inp ( ) const noexcept { return { scratch.storage.raw ( ), NumInput + 1 }; }
+    [[nodiscard]] span_ps inp ( ) noexcept { return { scratch.storage.raw.data ( ), NumInput + 1 }; }
+    [[nodiscard]] const_span_ps inp ( ) const noexcept { return { scratch.storage.raw.data ( ), NumInput + 1 }; }
     // excludes bias
     [[nodiscard]] auto & raw ( ) noexcept { return scratch.storage.raw; }
     [[nodiscard]] auto const & raw ( ) const noexcept { return scratch.storage.raw; }
@@ -183,14 +180,14 @@ class scratch_space {
     [[nodiscard]] auto & hid ( ) noexcept { return scratch.storage.hid; }
     [[nodiscard]] auto const & hid ( ) const noexcept { return scratch.storage.hid; }
 
-    [[nodiscard]] span_ps out ( ) noexcept { return { scratch.storage.out ( ), NumOutput }; }
-    [[nodiscard]] const_span_ps out ( ) const noexcept { return { scratch.storage.out ( ), NumOutput }; }
+    [[nodiscard]] span_ps out ( ) noexcept { return { scratch.storage.out.data ( ), NumOutput }; }
+    [[nodiscard]] const_span_ps out ( ) const noexcept { return { scratch.storage.out.data ( ), NumOutput }; }
 
-    [[nodiscard]] span_ps neu ( ) noexcept { return { scratch.hid.scratch ( ), NumNeurons }; }
-    [[nodiscard]] const_span_ps neu ( ) const noexcept { return { scratch.hid.scratch ( ), NumNeurons }; }
+    [[nodiscard]] span_ps neu ( ) noexcept { return { scratch.storage.hid.data (), NumNeurons }; }
+    [[nodiscard]] const_span_ps neu ( ) const noexcept { return { scratch.storage.hid.data (), NumNeurons }; }
 
-    [[nodiscard]] span_ps all ( ) noexcept { return { scratch.storage.raw ( ), NumInpHidOut }; }
-    [[nodiscard]] const_span_ps all ( ) const noexcept { return { scratch.storage.raw ( ), NumInpHidOut }; }
+    [[nodiscard]] span_ps all ( ) noexcept { return { scratch.storage.raw.data ( ), NumInpHidOut }; }
+    [[nodiscard]] const_span_ps all ( ) const noexcept { return { scratch.storage.raw.data ( ), NumInpHidOut }; }
 
     template<typename Stream>
     [[maybe_unused]] friend Stream & operator<< ( Stream & out_, scratch_space const & space_ ) noexcept {
@@ -199,6 +196,9 @@ class scratch_space {
         out_ << nl;
         return out_;
     }
+
+    [[nodiscard]] constexpr float * data ( ) noexcept { return scratch.storage.raw.data ( ); }
+    [[nodiscard]] constexpr float const * data ( ) const noexcept { return scratch.storage.raw.data ( ); }
 
     private:
     space scratch;
@@ -223,7 +223,7 @@ struct cascade_network {
     static constexpr int NumInpHid    = NumInput + NumOnes + NumNeurons - NumOutput;
     static constexpr int NumInpHidOut = NumInput + NumOnes + NumNeurons;
 
-    static constexpr int NumWeights = ( NumNeurons * ( 2 * NumInpHidOut ) ) / 2;
+    static constexpr int NumWeights = ( NumNeurons * NumInp ) + ( NumNeurons - 1 ) * ( NumNeurons ) / 2;
 
     static constexpr float alpha = 0.25f; // learning
 
@@ -252,7 +252,7 @@ struct cascade_network {
             ( ( o /= sum ) += max );
     }
 
-    void feed_forward ( ) const noexcept {
+    void feed_forward ( ) noexcept {
         auto dat = space.data ( ), wgt = weights.data ( );
         int i = NumInp;
         for ( auto & n : space.neu ( ) ) {
@@ -364,15 +364,7 @@ struct cascade_network {
         return out_;
     }
 
-    friend class cereal::access;
-
-    template<class Archive>
-    void serialize ( Archive & ar_ ) {
-        ar_ ( weights );
-    }
-
-    alignas ( 64 ) static thread_local calc::scratch_space<NumInput, NumOnes, NumOutput,
-                                                           NumNeurons> space; // input-bias-hidden-output - scratch space
+    calc::scratch_space<NumInput, NumOnes, NumOutput, NumNeurons> space; // input-bias-hidden-output - scratch space
 
     wgt_type weights;
 };
